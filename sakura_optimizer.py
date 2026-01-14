@@ -9,40 +9,38 @@ import urllib.request
 from pathlib import Path
 
 VERSION = "1.0.0"
-# UPDATE_URL should point to the raw python file location
-UPDATE_URL = "https://example.com/sakura_optimizer.py"
+UPDATE_URL = "https://raw.githubusercontent.com/ziggy12122/Sakura-optimizer/refs/heads/main/sakura_optimizer.py"
+
 
 def check_for_updates(current_url):
-    if not current_url or "example.com" in current_url:
+    if not current_url:
         return
     try:
         print(f"{_c('96;1')}Checking for updates...{_c('0')}")
         with urllib.request.urlopen(current_url, timeout=5) as response:
             if response.status != 200:
                 return
-            new_code = response.read().decode('utf-8', errors='ignore')
-            
-            # Simple version extraction
+            new_code = response.read().decode("utf-8", errors="ignore")
             import re
+
             match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', new_code)
             if match:
                 remote_version = match.group(1)
                 if remote_version != VERSION:
-                    print(f"{_c('92;1')}New version found: {remote_version} (Current: {VERSION}){_c('0')}")
+                    print(
+                        f"{_c('92;1')}New version found: {remote_version} (Current: {VERSION}){_c('0')}"
+                    )
                     print("Updating...")
-                    
-                    # Backup current
                     shutil.copy2(__file__, __file__ + ".bak")
-                    
                     with open(__file__, "w", encoding="utf-8") as f:
                         f.write(new_code)
-                        
                     print(f"{_c('92;1')}Update complete! Please restart the tool.{_c('0')}")
                     sys.exit(0)
                 else:
                     print(f"You are on the latest version ({VERSION}).")
     except Exception as e:
         print(f"{_c('91;1')}Update check failed: {e}{_c('0')}")
+
 
 def _supports_ansi():
     try:
@@ -428,6 +426,79 @@ def debloat_execute(mode, apply, keep_list, remove_names):
                 result["removed"].append(n)
     return result
 
+
+def create_restore_point():
+    if detect_os() != "windows":
+        return False, "Restore points are only available on Windows."
+    cmd = (
+        'Checkpoint-Computer -Description "Sakura Optimizer Restore Point" '
+        '-RestorePointType "MODIFY_SETTINGS"'
+    )
+    out = _run_ps(cmd, timeout=300)
+    if not out:
+        return False, "Failed to create restore point. Run as administrator and ensure system protection is enabled."
+    return True, ""
+
+
+def interactive_restore_prompt(os_name):
+    if not sys.stdin.isatty():
+        return
+    print()
+    print(f"{_c('91;1')}Warning:{_c('0')} Sakura Optimizer can change system settings.")
+    print("Creating a system restore point is recommended before applying changes.")
+    if os_name != "windows":
+        print("System restore points are only supported on Windows.")
+        choice = input("Press Enter to continue or type Q to quit: ").strip().lower()
+        if choice == "q":
+            sys.exit(0)
+        return
+    while True:
+        print()
+        print("1) Create restore point and continue")
+        print("2) Continue without restore point")
+        print("3) Exit")
+        choice = input("Select an option: ").strip()
+        if choice == "1":
+            ok, msg = create_restore_point()
+            if ok:
+                print(f"{_c('92;1')}Restore point created successfully.{_c('0')}")
+                return
+            print(f"{_c('91;1')}{msg}{_c('0')}")
+            continue
+        if choice == "2":
+            print("Continuing without restore point.")
+            return
+        if choice == "3":
+            sys.exit(0)
+
+
+def interactive_category_menu(current_category):
+    if not sys.stdin.isatty():
+        return current_category
+    print()
+    print(f"{_c('94;1')}Select section:{_c('0')}")
+    print(" 1) Network   2) System   3) Storage")
+    print(" 4) CPU       5) GPU      6) Debloat")
+    print(" 7) All       0) Exit")
+    mapping = {
+        "1": "network",
+        "2": "system",
+        "3": "storage",
+        "4": "cpu",
+        "5": "gpu",
+        "6": "debloat",
+        "7": "all",
+        "0": "exit",
+    }
+    while True:
+        choice = input("Enter choice number: ").strip()
+        if choice in mapping:
+            if choice == "0":
+                sys.exit(0)
+            return mapping[choice]
+        print("Invalid choice. Please enter a number from 0 to 7.")
+
+
 def run_optimizations(os_name, apply):
     results = {}
     removed = clean_temp(os_name, apply)
@@ -451,17 +522,22 @@ def main():
     parser.add_argument("--keep", nargs="*", default=["Microsoft", "Xbox", "Store", "Photos"])
     parser.add_argument("--remove", nargs="*", default=[])
     parser.add_argument("--art-level", choices=["basic", "premium"], default="premium")
-    parser.add_argument("--update-url", default=UPDATE_URL, help="URL to check for updates")
-    parser.add_argument("--no-update", action="store_true", help="Skip update check")
+    parser.add_argument("--update-url", default=UPDATE_URL)
+    parser.add_argument("--no-update", action="store_true")
     args = parser.parse_args()
 
     print(brand(args.art_level))
-    
+
+    os_name = detect_os()
     if not args.no_update and not args.json:
         check_for_updates(args.update_url)
 
+    interactive_restore_prompt(os_name)
+
+    if args.category == "all" and not args.json:
+        args.category = interactive_category_menu(args.category)
+
     spinner("Loading Sakura environment", 1.0)
-    os_name = detect_os()
     cpu = detect_cpu_vendor(os_name)
     gpus = detect_gpu_vendors(os_name)
     ram_b = detect_ram(os_name)

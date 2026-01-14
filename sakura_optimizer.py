@@ -24,20 +24,34 @@ def check_for_updates(current_url):
             import re
 
             match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', new_code)
+            remote_version = None
             if match:
                 remote_version = match.group(1)
-                if remote_version != VERSION:
-                    print(
-                        f"{_c('92;1')}New version found: {remote_version} (Current: {VERSION}){_c('0')}"
-                    )
-                    print("Updating...")
-                    shutil.copy2(__file__, __file__ + ".bak")
-                    with open(__file__, "w", encoding="utf-8") as f:
-                        f.write(new_code)
-                    print(f"{_c('92;1')}Update complete! Please restart the tool.{_c('0')}")
-                    sys.exit(0)
-                else:
-                    print(f"You are on the latest version ({VERSION}).")
+
+            try:
+                with open(__file__, "r", encoding="utf-8") as f:
+                    local_code = f.read()
+            except Exception:
+                local_code = ""
+
+            must_update = False
+            if remote_version and remote_version != VERSION:
+                must_update = True
+            elif new_code and new_code != local_code:
+                must_update = True
+
+            if must_update:
+                ver_msg = remote_version or "unknown"
+                print(
+                    f"{_c('92;1')}Updating Sakura Optimizer from GitHub (remote version: {ver_msg}){_c('0')}"
+                )
+                shutil.copy2(__file__, __file__ + ".bak")
+                with open(__file__, "w", encoding="utf-8") as f:
+                    f.write(new_code)
+                print(f"{_c('92;1')}Update complete! Please restart the tool.{_c('0')}")
+                sys.exit(0)
+            else:
+                print(f"You are on the latest version ({VERSION}).")
     except Exception as e:
         print(f"{_c('91;1')}Update check failed: {e}{_c('0')}")
 
